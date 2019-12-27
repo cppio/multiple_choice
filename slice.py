@@ -8,6 +8,7 @@ import base64, collections, pdf2image, re, requests
 KEY = "AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM"
 ORIGIN = "https://explorer.apis.google.com"
 ENDPOINT = "https://vision.googleapis.com/v1/files:annotate"
+IMAGE_ENDPOINT = "https://vision.googleapis.com/v1/images:annotate"
 
 
 def detect_pdf_text(content, pages):
@@ -121,6 +122,29 @@ def slice_image(image, slices):
         yield image.crop((0, top, image.width, bottom))
 
 
+def detect_images_text(paths):
+    features = [{"type": "DOCUMENT_TEXT_DETECTION"}]
+
+    responses = []
+
+    with requests.Session() as session:
+        session.headers = {"origin": ORIGIN}
+        session.params = {"key": KEY}
+
+        for i in range(0, len(paths), 16):
+            body = {"requests": []}
+
+            for path in paths[i:i + 16]:
+                with open(path, "rb") as file:
+                    content = file.read()
+            
+                body["requests"].append({"image": {"content": base64.b64encode(content).decode()}, "features": features})
+
+            response = session.post(IMAGE_ENDPOINT, json=body)
+            responses.extend(response.json()["responses"])
+
+    return [response["fullTextAnnotation"]["text"] for response in responses]
+
 def slice_pdf(path):
     images = pdf2image.convert_from_path(path)
 
@@ -135,13 +159,21 @@ def slice_pdf(path):
     for num, image, top in filter_questions(questions):
         slices[image].append([top * images[image].height, num])
 
+    paths = []
+
     for image, slices in slices.items():
         slices = sorted(slices)
         tops, nums = [top for top, num in slices], (num for top, num in slices)
         tops.append(images[image].height)
 
         for num, slice in zip(nums, slice_image(images[image], tops)):
-            slice.save("{}.{}.png".format(path, num))
+            image_path = "{}.{}.png".format(path, num)
+            paths.append(image_path)
+            slice.save(image_path)
+
+    for path, text in zip(paths, detect_images_text(paths)):
+        with open("{}.txt".format(path[:-4]), "w") as file:
+            print(text, file=file)
 
 
 if __name__ == "__main__":
@@ -155,4 +187,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for file in args.file:
+        print("slicing", file)
         slice_pdf(file)
