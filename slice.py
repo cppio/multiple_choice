@@ -134,16 +134,22 @@ def detect_images_text(paths):
         for i in range(0, len(paths), 16):
             body = {"requests": []}
 
-            for path in paths[i:i + 16]:
+            for path in paths[i : i + 16]:
                 with open(path, "rb") as file:
                     content = file.read()
-            
-                body["requests"].append({"image": {"content": base64.b64encode(content).decode()}, "features": features})
+
+                body["requests"].append(
+                    {
+                        "image": {"content": base64.b64encode(content).decode()},
+                        "features": features,
+                    }
+                )
 
             response = session.post(IMAGE_ENDPOINT, json=body)
             responses.extend(response.json()["responses"])
 
     return [response["fullTextAnnotation"]["text"] for response in responses]
+
 
 def slice_pdf(path):
     images = pdf2image.convert_from_path(path)
